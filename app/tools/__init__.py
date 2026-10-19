@@ -59,7 +59,7 @@ def build_tools(
     for bp in DATA_BLUEPRINTS:
         registry.bind(
             bp.name,
-            make_data_impl(bp, fuyao),
+            make_data_impl(bp, fuyao, ifind_client),
             fallback=make_ifind_fallback(bp, ifind_client) if bp.use_fallback else None,
         )
     for bp in INTERNAL_BLUEPRINTS:

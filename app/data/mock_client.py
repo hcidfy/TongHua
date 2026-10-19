@@ -90,6 +90,25 @@ def _filter_by_thscode(payload: dict[str, Any], params: dict[str, Any], path: st
     return filtered
 
 
+def _filter_search(payload: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    """离线检索也必须尊重 q；未知公司不能命中固定样本里的茅台。"""
+    query = str(params.get("q") or "").strip().lower()
+    data = payload.get("data")
+    if not query or not isinstance(data, dict) or not isinstance(data.get("item"), list):
+        return payload
+    matches = [
+        row for row in data["item"]
+        if isinstance(row, dict) and any(
+            str(row.get(key) or "").lower() in query or query in str(row.get(key) or "").lower()
+            for key in ("thscode", "ticker", "name") if row.get(key)
+        )
+    ]
+    filtered = dict(payload)
+    filtered["data"] = {**data, "item": matches[:int(params.get("limit") or 50)],
+                        "total": len(matches)}
+    return filtered
+
+
 class MockClient(FuyaoClient):
     """离线客户端：复用父类的信封解析与错误映射，只替换 `raw()` 的数据来源。"""
 
@@ -128,6 +147,8 @@ class MockClient(FuyaoClient):
         else:
             target = self._resolve(path)
             payload = json.loads(target.read_text(encoding="utf-8"))
+        if normalized == "/api/meta/tickers/search":
+            payload = _filter_search(payload, params or {})
         payload = _filter_by_thscode(payload, params or {}, path)
         return RawResponse(
             url=f"mock://{normalized}",

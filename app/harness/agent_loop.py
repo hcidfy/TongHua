@@ -388,8 +388,10 @@ class AgentLoop:
 
             raw_args = result.parsed.get("args")
             args = dict(raw_args) if isinstance(raw_args, dict) else {}
-            problem = self._args_problem(ctx, tool_name, args)
+            problem = self._args_problem(ctx, tool_name, args) or self._target_problem(ctx, tool_name, args)
             if problem is None:
+                if tool_name == "get_news_flash" and self._company_news_query(ctx.goal):
+                    args["query"] = ctx.goal
                 return (
                     str(result.parsed.get("thought") or ""),
                     tool_name,
@@ -413,6 +415,12 @@ class AgentLoop:
 
         # 降级：按计划顺序取下一个工具，入参优先用调用方给定值、否则按 schema 离线派生
         args = ctx.args_by_tool.get(fallback_tool) or self._derive_args(fallback_tool, ctx)
+        if fallback_tool == "get_news_flash" and self._company_news_query(ctx.goal):
+            args = {**args, "query": ctx.goal}
+        problem = self._target_problem(ctx, fallback_tool, args)
+        if problem:
+            ctx.notes.append(f"工具 {fallback_tool} 的标的未核实：{problem}")
+            args = {}
         reason = (result.error if result is not None else None) or "模型未给出可用决策"
         return (
             f"模型不可用（{reason}），按计划调用 {fallback_tool}",
@@ -458,6 +466,7 @@ class AgentLoop:
         lines = [
             f"研究目标：{ctx.goal}",
             f"当前任务：{task.title}（{task.intent}）",
+            "search_ticker 的 q 只填目标中出现的公司名称或完整代码；其他单标的工具仅可使用检索证据中与目标匹配的代码，不得猜测或借用其他公司。",
             "可用工具与参数（参数名与类型必须严格照抄，不得改写；带 * 为必填）：",
             *self._tool_signatures(ctx, remaining),
         ]
@@ -514,6 +523,23 @@ class AgentLoop:
         """模型给出的 `args` 是否满足该工具 schema（复用执行器同一套校验口径）。"""
         return _validate_args(self._schema_of(ctx, name), args)
 
+    def _target_problem(self, ctx: LoopContext, name: str, args: dict[str, Any]) -> str | None:
+        if name == "search_ticker":
+            query = str(args.get("q") or "").strip()
+            if query and query.lower() not in ctx.goal.lower():
+                return "检索词不在研究目标内"
+        if name not in {"get_financials", "get_valuation", "get_price_snapshot",
+                        "get_price_history", "get_index_constituents"}:
+            return None
+        known = set(self._known_thscodes(ctx))
+        if not known:
+            return "当前目标尚未匹配到证券代码"
+        raw = args.get("thscode") or args.get("thscodes") or []
+        codes = raw if isinstance(raw, list) else str(raw).split(",")
+        if not codes or any(str(code).strip().upper() not in known for code in codes):
+            return "所选代码与当前研究目标不一致"
+        return None
+
     def _derive_args(self, name: str, ctx: LoopContext) -> dict[str, Any]:
         """离线兜底入参：按 schema 的必填项 + 目标里可确定的取值派生（不猜、缺则缺）。
 
@@ -528,7 +554,7 @@ class AgentLoop:
         derived: dict[str, Any] = {}
         for key in required:
             if key == "q":
-                derived[key] = ctx.goal.strip()
+                derived[key] = self._search_query(ctx.goal)
             elif key == "thscode":
                 derived[key] = codes[0] if codes else ""
             elif key == "thscodes":
@@ -540,23 +566,51 @@ class AgentLoop:
         return {key: value for key, value in derived.items() if value not in ("", [], None)}
 
     @staticmethod
+    def _company_news_query(goal: str) -> bool:
+        return "公司" in goal or ("板块" not in goal and AgentLoop._search_query(goal) != goal.strip())
+
+    @staticmethod
+    def _search_query(goal: str) -> str:
+        explicit = _THSCODE_RE.search(goal)
+        if explicit:
+            return explicit.group(0)
+        match = re.search(
+            r"(?:分析|研究|查询|了解|梳理|看看)([\u4e00-\u9fff]{2,12}?)"
+            r"(?:这家|这只|近[一二三四五六七八九十两\d]|最近|公司|股票|板块|的)", goal
+        )
+        return match.group(1) if match else goal.strip()
+
+    @staticmethod
     def _known_thscodes(ctx: LoopContext) -> list[str]:
-        """已知标的代码：优先取已取证事实里的 `thscode`，其次取目标里显式写出的代码。"""
-        found: list[str] = []
+        """只使用目标显式代码或与目标名称匹配的标的检索证据。"""
+        explicit = [f"{code}.{market.upper()}" for code, market in _THSCODE_RE.findall(ctx.goal)]
+        matches: list[str] = []
         for item in ctx.evidences:
+            if not str(getattr(item, "interface", "")).endswith("/meta/tickers/search"):
+                continue
             value = getattr(item, "value_json", None)
-            for code in _collect_thscodes(value):
-                if code not in found:
-                    found.append(code)
-        if not found:
-            found = [f"{code}.{market.upper()}" for code, market in _THSCODE_RE.findall(ctx.goal)]
-        return found
+            rows = value.get("item", []) if isinstance(value, dict) else []
+            for row in rows if isinstance(rows, list) else []:
+                if not isinstance(row, dict):
+                    continue
+                code = str(row.get("thscode") or "").upper()
+                name = str(row.get("name") or "").strip()
+                matched = len(name) >= 2 and (
+                    name in ctx.goal or (len(name) >= 4 and name[-2:] in ctx.goal)
+                )
+                if code and matched and code not in matches:
+                    matches.append(code)
+        # 多个检索结果均匹配目标时不能任选第一条。
+        return explicit or (matches if len(matches) == 1 else [])
 
     def _observe(
         self, task: TaskRow, ctx: LoopContext, result: ToolResult | DegradedResult
     ) -> Evidence | None:
         """Observe：成功取数 → 构造一条 `Evidence`（C3 强制字段全部显式给出）。"""
         if not isinstance(result, ToolResult):
+            return None
+        if isinstance(result.data, dict) and result.data.get("total") == 0 and not result.data.get("text"):
+            ctx.notes.append(f"{result.tool_name} 返回零条记录，未生成事实证据")
             return None
         evidence = Evidence(
             run_id=ctx.run_id,

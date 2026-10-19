@@ -263,6 +263,7 @@ _NEWS_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "tab_id": {"type": "number", "description": "资讯热榜 tab，必填；实测 tab_id=1 有数据，默认 1"},
+        "query": {"type": "string", "description": "特定公司/主题的资讯或公告检索语句；配置 iFinD news MCP 后优先检索"},
     },
     "required": [],
 }
@@ -455,7 +456,7 @@ DATA_BLUEPRINTS: tuple[ToolBlueprint, ...] = (
     ),
     ToolBlueprint(
         name="get_news_flash",
-        description="获取资讯热榜 / 深度专题（事件面），按 tab 分类返回条目。",
+        description="按目标查询公司资讯/公告；配置 iFinD news MCP 时走语义检索，宽泛市场目标才用资讯热榜。",
         domain="event",
         path="/api/news/topic/hot-list",
         args_mapping=_map_news,

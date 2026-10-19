@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import replace
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -37,8 +38,10 @@ from app.data import (
     TTLCache,
 )
 from app.data.mock_client import MockClient
+from app.data.ifind_client import IfindMCPClient
 from app.domain import Phase
 from app.harness import SessionManager, ToolRegistry
+from app.harness.agent_loop import AgentLoop, LoopContext
 from app.harness.pipeline import Pipeline
 from app.harness.tool_executor import DegradedResult, ToolExecutor, ToolInvocation, ToolResult
 from app.store.repo import TaskRepository
@@ -205,6 +208,89 @@ def test_m2_trim_drops_fields_outside_keep_fields(session: Session) -> None:
     rows = result.data["item"]
     assert rows and all("thscode" in row and "name" in row for row in rows)
     assert all("end_date" not in row and "last_delivery_date" not in row for row in rows)
+
+
+def test_mock_search_does_not_return_other_company_for_unmatched_goal() -> None:
+    client = MockClient(offline_settings())
+    rows = client.get("/api/meta/tickers/search", {"q": "宁德时代"}).item
+    assert rows == []
+    assert [row["name"] for row in client.get(
+        "/api/meta/tickers/search", {"q": "茅台"}
+    ).item] == ["贵州茅台"]
+
+
+def test_agent_does_not_borrow_unrelated_ticker_for_targeted_financials() -> None:
+    registry = _mock_registry()
+    loop = AgentLoop(model_router=None, tool_executor=None)
+    ctx = LoopContext(run_id="r", goal="分析宁德时代这家公司近3年收入结构变化",
+                      registry=registry)
+    ctx.evidences.append(SimpleNamespace(
+        interface="/api/meta/tickers/search",
+        value_json={"item": [{"name": "贵州茅台", "thscode": "600519.SH"}]},
+    ))
+    assert loop._search_query(ctx.goal) == "宁德时代"
+    assert loop._known_thscodes(ctx) == []
+    assert loop._target_problem(ctx, "get_financials", {"thscode": "600519.SH"})
+    assert loop._derive_args("get_financials", ctx) == {}
+
+    ctx.evidences.append(SimpleNamespace(
+        interface="/api/meta/tickers/search",
+        value_json={"item": [{"name": "宁德时代", "thscode": "300750.SZ"}]},
+    ))
+    assert loop._known_thscodes(ctx) == ["300750.SZ"]
+    assert loop._derive_args("get_financials", ctx) == {"thscode": "300750.SZ"}
+    assert loop._target_problem(ctx, "get_financials", {"thscode": "600519.SH"})
+
+
+def test_company_news_uses_ifind_query_instead_of_generic_hot_list(session: Session) -> None:
+    class NewsIfind:
+        enabled = True
+
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, str]] = []
+
+        def query(self, query: str, *, tool: str) -> str:
+            self.calls.append((tool, query))
+            return "宁德时代公告检索：需人工核对公告原文与时点"
+
+    run_id, task_id = _run_and_task(session)
+    ifind = NewsIfind()
+    registry = build_tools(
+        ToolRegistry(session), client=MockClient(offline_settings()), ifind=ifind
+    )
+    result = _executor(session, registry).invoke(
+        run_id, task_id,
+        ToolInvocation("get_news_flash", {"query": "宁德时代年度公告"}),
+    )
+    assert isinstance(result, ToolResult)
+    assert result.source == SOURCE_IFIND
+    assert result.interface == "ifind://search_notice"
+    assert "未经字段级结构化核验" in result.caliber
+    assert ifind.calls == [("search_notice", "宁德时代年度公告")]
+
+    next_task = _new_task(session, run_id, 2)
+    no_mcp = _executor(session, _mock_registry(session)).invoke(
+        run_id, next_task, ToolInvocation("get_news_flash", {"query": "宁德时代公告"})
+    )
+    assert isinstance(no_mcp, DegradedResult)
+    assert "不能以无关热榜代替" in no_mcp.reason
+
+
+def test_ifind_news_query_supplies_all_live_required_arguments() -> None:
+    client = IfindMCPClient(offline_settings())
+    captured: dict[str, Any] = {}
+
+    def record(tool: str, arguments: dict[str, Any]) -> str:
+        captured.update(arguments)
+        assert tool == "search_notice"
+        return "受控文本"
+
+    client.call_tool = record
+    assert client.query("宁德时代2025年公告", tool="search_notice") == "受控文本"
+    assert captured["query"] == "宁德时代2025年公告"
+    assert captured["size"] == 5
+    assert captured["time_start"] <= "2025-01-01"
+    assert captured["time_end"] >= "2025-01-01"
 
 
 def test_m2_total_falls_back_to_returned_row_count(session: Session) -> None:

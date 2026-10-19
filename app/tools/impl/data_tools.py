@@ -73,19 +73,57 @@ def _total_of(data: Any, rows: list[Any]) -> int:
     return len(rows)
 
 
-def make_data_impl(bp: ToolBlueprint, client: Any) -> Any:
+def make_data_impl(bp: ToolBlueprint, client: Any, ifind: Any = None) -> Any:
     """把蓝图编译成一个「扶摇 / Mock 取数」实现（供 `ToolRegistry.bind`）。"""
 
     def impl(args: dict[str, Any]) -> ToolResult:
         payload = dict(args or {})
+        query = str(payload.get("query") or "").strip()
+        if bp.name == "get_news_flash" and query:
+            if ifind is None or not getattr(ifind, "enabled", False):
+                raise NotEnabled("公司定向资讯需要配置 iFinD news MCP，不能以无关热榜代替")
+            # 自然语言结果仅作低置信度文本证据，不能冒充结构化公告字段。
+            text = ifind.query(query, tool="search_notice" if "公告" in query else "search_news")
+            if not text.strip():
+                raise NotEnabled("iFinD 未返回相关资讯，不能用热榜填充")
+            return ToolResult(
+                tool_name=bp.name,
+                data={"text": text, "query": query},
+                **quality_fields(
+                    source=SOURCE_IFIND,
+                    interface="ifind://search_notice" if "公告" in query else "ifind://search_news",
+                    as_of=None,
+                    unit=None,
+                    caliber="iFinD 语义检索文本（未经字段级结构化核验）",
+                    raw_ref=f"ifind://news#at={now_ms()}",
+                    confidence=IFIND_CONFIDENCE,
+                ),
+            )
         path = bp.path_for(payload)
         params = bp.args_mapping(payload)
         api = client.get(path, params)
         rows = records_of(api.data, bp.list_key)
+        if bp.name == "search_ticker":
+            q = params["q"].lower()
+            rows = [
+                row for row in rows if isinstance(row, dict) and any(
+                    q in str(row.get(key) or "").lower()
+                    or str(row.get(key) or "").lower() in q
+                    for key in ("name", "thscode", "ticker") if row.get(key)
+                )
+            ]
+        if bp.name in {"get_financials", "get_price_snapshot", "get_valuation"}:
+            codes = set(str(params.get("thscode") or params.get("thscodes") or "").split(","))
+            rows = [
+                row for row in rows if isinstance(row, dict)
+                and str(row.get("thscode") or "") in codes
+            ]
         source = source_of(client)
         return ToolResult(
             tool_name=bp.name,
-            data={"total": _total_of(api.data, rows), bp.list_key: trim_rows(rows, bp.keep_fields)},
+            data={"total": len(rows) if bp.name in {
+                "search_ticker", "get_financials", "get_price_snapshot", "get_valuation"
+            } else _total_of(api.data, rows), bp.list_key: trim_rows(rows, bp.keep_fields)},
             **quality_fields(
                 source=source,
                 interface=path,

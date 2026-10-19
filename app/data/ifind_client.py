@@ -16,7 +16,9 @@
 from __future__ import annotations
 
 import json
+import re
 import threading
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -241,6 +243,18 @@ class IfindMCPClient:
         question = (text or "").strip()
         if not question:
             raise FuyaoError("iFinD 查询语句为空")
+        if tool in {"search_news", "search_notice"}:
+            today = date.today()
+            years = [int(y) for y in re.findall(r"20\d{2}", question)]
+            start = today - timedelta(days=3 * 366)
+            if years:
+                start = min(start, date(min(years), 1, 1))
+            return self.call_tool(tool, {
+                "query": question,
+                "size": 5,
+                "time_start": start.isoformat(),
+                "time_end": today.isoformat(),
+            })
         return self.call_tool(tool, {"query": question})
 
 

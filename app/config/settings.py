@@ -37,6 +37,9 @@ DEFAULT_KEY_FILE_CANDIDATES: tuple[Path, ...] = (
 
 #: 脱敏时用于遮蔽的最小密钥长度（过短的串不参与替换，避免误伤）。
 _MIN_SECRET_LEN = 8
+IFIND_NEWS_ENDPOINT = (
+    "https://api-mcp.51ifind.com:8643/ds-mcp-servers/hexin-ifind-ds-news-mcp"
+)
 
 
 def parse_fuyao_key(text: str) -> str | None:
@@ -77,6 +80,22 @@ def _read_key_from_files(paths: Iterable[Path]) -> str | None:
         key = parse_fuyao_key(text)
         if key:
             return key
+    return None
+
+
+def _read_ifind_key_from_files(paths: Iterable[Path]) -> str | None:
+    """可选地读取本地受保护文件中的 iFinD JWE；环境变量始终优先。"""
+    for path in paths:
+        try:
+            if not path.is_file():
+                continue
+            lines = path.read_text(encoding="utf-8-sig", errors="ignore").splitlines()
+        except OSError:
+            continue
+        for raw in lines:
+            token = raw.strip()
+            if len(token) > 200 and len(token.split(".")) == 5:
+                return token
     return None
 
 
@@ -121,7 +140,7 @@ class Settings(BaseSettings):
     #: **默认启用，但仅作降级备源**（03_BUILD_PLAN §0 表 L28）；缺 endpoint/key 时 `enabled` 为假，
     #: 备源调用抛 `NotEnabled` → 降级阶梯第 ⑦ 步产出 `degradation_notice`。
     ifind_mcp_enabled: bool = True
-    ifind_mcp_endpoint: str = ""
+    ifind_mcp_endpoint: str = IFIND_NEWS_ENDPOINT
     ifind_mcp_key: str | None = None
 
     # --- 数据工具（M2；架构 §9.3 第 ④ 步 / §14.1）---
@@ -189,7 +208,8 @@ class Settings(BaseSettings):
 
     # --- 应用 ---
     app_env: str = "dev"
-    mock_data_mode: bool = True
+    # 有真实 Key 时缺省走真实通道；明确开启时仍可离线演示。
+    mock_data_mode: bool = False
 
     #: 非契约配置：允许覆盖 `api-key.txt` 位置（不设即用默认候选，缺失即跳过）。
     fuyao_api_key_file: str | None = None
@@ -238,6 +258,10 @@ def load_settings() -> Settings:
     if not settings.fuyao_api_key:
         # 无密钥：强制 Mock，绝不抛异常（HANDOFF §4.3）。
         settings.mock_data_mode = True
+    if not settings.ifind_mcp_key and settings.ifind_mcp_enabled:
+        settings.ifind_mcp_key = _read_ifind_key_from_files(settings.key_file_candidates)
+    if settings.ifind_mcp_enabled and settings.ifind_mcp_key and not settings.ifind_mcp_endpoint:
+        settings.ifind_mcp_endpoint = IFIND_NEWS_ENDPOINT
     return settings
 
 

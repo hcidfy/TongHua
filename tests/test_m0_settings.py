@@ -76,6 +76,17 @@ def test_m0_settings_missing_key_file_is_silent(tmp_path: Path) -> None:
     assert _read_key_from_files((tmp_path / "not-exist.txt",)) is None
 
 
+def test_m0_ifind_key_file_is_optional_and_never_confuses_fuyao(tmp_path: Path) -> None:
+    from app.config.settings import _read_ifind_key_from_files, _read_key_from_files
+
+    token = ".".join(["A" * 60, "B" * 60, "C" * 60, "D" * 60, "E" * 60])
+    path = tmp_path / "api-key.txt"
+    path.write_text(f"{FAKE_KEY}\n{token}\n", encoding="utf-8")
+    assert _read_ifind_key_from_files((path,)) == token
+    assert _read_key_from_files((path,)) == FAKE_KEY
+    assert _read_ifind_key_from_files((tmp_path / "missing",)) is None
+
+
 def test_m0_mask_secret_does_not_leak_full_key() -> None:
     masked = mask_secret(FAKE_KEY)
     assert FAKE_KEY not in masked
