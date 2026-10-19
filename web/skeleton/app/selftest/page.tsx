@@ -14,6 +14,7 @@ import ApprovalCard from "@/components/blocks/ApprovalCard";
 import DegradationNotice from "@/components/blocks/DegradationNotice";
 import FallbackJsonCard from "@/components/blocks/FallbackJsonCard";
 import { financialResearch, planChains } from "@/lib/format";
+import { fallbackApiBase, resolveApiBase } from "@/lib/sse";
 
 type RenderToStaticMarkup = typeof import("react-dom/server").renderToStaticMarkup;
 
@@ -154,6 +155,14 @@ function runSelfTests(rtsm: RenderToStaticMarkup): Assertion[] {
     });
     must(html.includes("证据 1") && !html.includes("fccf952c1cab4d84995ad9bcbd555c62"), "引用编号泄露");
     return "显示可读编号与标题";
+  });
+  record("API 基址：坏的环境值回退到当前主机 8000", () => {
+    must(
+      fallbackApiBase({ protocol: "http:", hostname: "8.136.108.32" }) === "http://8.136.108.32:8000",
+      "坏的环境值未回退到当前主机",
+    );
+    must(resolveApiBase("http://127.0.0.1:8000/") === "http://127.0.0.1:8000", "合法基址不应被改写");
+    return "坏的 API 基址会自动回退到当前主机";
   });
 
   // 断言 1：7 个已实现组件用合法 props 渲染成功 + 关键字

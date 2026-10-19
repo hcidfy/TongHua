@@ -89,11 +89,48 @@ export interface ConnectOptions {
   withCredentials?: boolean;
 }
 
-/** 取后端基址：前端环境变量优先，缺省回落本机后端。 */
+const DEFAULT_API_BASE = "http://127.0.0.1:8000";
+
+function trimTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, "");
+}
+
+function validAbsoluteBase(raw: string | null | undefined): string | null {
+  const value = typeof raw === "string" ? raw.trim() : "";
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    if (!parsed.hostname) return null;
+    return trimTrailingSlash(`${parsed.protocol}//${parsed.host}`);
+  } catch {
+    return null;
+  }
+}
+
+export function fallbackApiBase(
+  browserLocation?: Pick<Location, "protocol" | "hostname"> | null,
+): string {
+  if (browserLocation?.hostname) {
+    return trimTrailingSlash(`${browserLocation.protocol}//${browserLocation.hostname}:8000`);
+  }
+  return DEFAULT_API_BASE;
+}
+
+/**
+ * 取后端基址：显式参数优先，其次 NEXT_PUBLIC_API_BASE。
+ *
+ * 线上若把环境变量误配成 `http:` / `http://` 这类不完整值，浏览器会把
+ * `fetch("http:/api/threads")` 发到当前站点，最后得到 404。这里发现坏值后，
+ * 客户端退回到“当前主机名 + 8000 端口”；服务端环境没有浏览器位置时再回落本机默认值。
+ */
 export function resolveApiBase(explicit?: string): string {
-  if (explicit) return explicit.replace(/\/+$/, "");
-  const fromEnv = process.env.NEXT_PUBLIC_API_BASE;
-  return (fromEnv ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
+  const direct = validAbsoluteBase(explicit);
+  if (direct) return direct;
+
+  const fromEnv = validAbsoluteBase(process.env.NEXT_PUBLIC_API_BASE);
+  if (fromEnv) return fromEnv;
+
+  return fallbackApiBase(typeof window !== "undefined" ? window.location : null);
 }
 
 /**
