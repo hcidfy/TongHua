@@ -7,7 +7,7 @@
 | 项 | 现在可填的内容 | 还需你补 |
 |---|---|---|
 | 可操作 Web 产品 URL | `http://8.136.108.32:3000/console` | 若已配域名/HTTPS，替换为最终 URL（改了就要重建前端并核对 `NEXT_PUBLIC_API_BASE`） |
-| 源代码仓库 | `https://github.com/hcidfy/TongHua`（项目根 `InvestmentXBuddy/`） | 推送后确认评委视角能看到 README 与 `push/` |
+| 源代码仓库 | `https://github.com/hcidfy/TongHua`（仓库根即项目根） | 推送后确认评委视角能看到 README 与 `push/` |
 | AI 使用与验证记录 | `push/AI使用与验证记录和测试说明.md`（或分开提 `AI_USAGE_AND_VERIFICATION.md`） | — |
 | 测试说明 | 同上（或 `push/TEST_REPORT.md`） | §6 云端验收表的待补项 |
 | 演示视频（可选） | 已放在仓库 `push/video.mp4`（H.264/MP4 约 15 MB） | 若要单独上传平台，补一个**可访问链接**；并确认视频里没有 `.env`/Key/持仓/个人信息 |

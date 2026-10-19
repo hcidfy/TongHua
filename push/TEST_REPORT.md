@@ -172,7 +172,7 @@ Invoke-RestMethod "http://8.136.108.32:8000/api/observability/runs/<RUN_ID>/comp
 **D. 本地复现（可选）**
 
 ```powershell
-cd InvestmentXBuddy
+cd TongHua          # 克隆后仓库根即项目根
 conda run -n TongHua --no-capture-output python -m pytest -q
 npm --prefix web/skeleton run build
 ```

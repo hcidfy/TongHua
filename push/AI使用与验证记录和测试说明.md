@@ -6,9 +6,9 @@
 | 必交物 | 入口 |
 |---|---|
 | 可操作 Web 产品 | [http://8.136.108.32:3000/console](http://8.136.108.32:3000/console)（HTTP；请勿输入真实持仓/隐私/密钥） |
-| 源代码仓库 + README | [github.com/hcidfy/TongHua](https://github.com/hcidfy/TongHua)，项目根 `InvestmentXBuddy/`；[项目 README](../README.md) |
+| 源代码仓库 + README | [github.com/hcidfy/TongHua](https://github.com/hcidfy/TongHua)（仓库根即项目根）；[项目 README](../README.md) |
 | 提交材料索引 | [push/README.md](README.md) |
-| 演示视频（可选） | 由候选人录制上传 |
+| 演示视频（可选） | [video.mp4](video.mp4)（同目录，H.264/MP4 约 15 MB） |
 
 ---
 

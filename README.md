@@ -14,7 +14,7 @@
 | 题目必交项 | 入口 | 说明 |
 |---|---|---|
 | 可访问、可操作的 Web 产品 | [研究控制台](http://8.136.108.32:3000/console) | 首页 `/` 307 跳转到 `/console` |
-| 源代码仓库与 README | [hcidfy/TongHua](https://github.com/hcidfy/TongHua) + 本文 | 项目根目录为 `InvestmentXBuddy/` |
+| 源代码仓库与 README | [hcidfy/TongHua](https://github.com/hcidfy/TongHua) + 本文 | 仓库根目录即项目根：`app/`、`tests/`、`web/`、`docs/`、`push/` 都在仓库根目录下 |
 | AI 使用与验证记录 + 测试说明 | [单文件版](push/AI使用与验证记录和测试说明.md) | 详细版：[AI 使用与验证](push/AI_USAGE_AND_VERIFICATION.md)、[测试说明](push/TEST_REPORT.md) |
 | 提交要求 1–3 的实现对照 | [IMPLEMENTATION.md](push/IMPLEMENTATION.md) | 能力注册 / 计划执行 / 压缩 / 记忆 / 检查点恢复、权限审批停止成本可观测、产品映射与降级恢复 |
 | 提交材料索引与验收导读 | [push/README.md](push/README.md) | 5 分钟体验路径、材料清单、边界声明 |
@@ -35,7 +35,7 @@
 
 ### 1.2 本地（源码复现）
 
-前提：Python 3.11（`pyproject.toml` 要求 `>=3.11`）、Node.js 20+、npm（本机验证：conda env `TongHua` = Python 3.11.17，Node v24.14.0 / npm 11.9.0）。以下命令在项目根目录 `InvestmentXBuddy/` 执行：
+前提：Python 3.11（`pyproject.toml` 要求 `>=3.11`）、Node.js 20+、npm（本机验证：conda env `TongHua` = Python 3.11.17，Node v24.14.0 / npm 11.9.0）。以下命令在仓库根目录（即项目根）执行：
 
 ```powershell
 conda run -n TongHua --no-capture-output python -m pip install -e ".[dev]"
@@ -185,7 +185,7 @@ npm --prefix web/skeleton run build                              # 前端构建 
 - 三类场景覆盖（主链路 / 数据缺失与接口失败 / 极端与合规边界）、云端只读核查原文、评委复现命令与证据分级见 [push/TEST_REPORT.md](push/TEST_REPORT.md)。
 
 ```
-InvestmentXBuddy/
+TongHua/               ← 仓库根 = 项目根
 ├─ app/
 │  ├─ api/            # REST + SSE + 审批 + 可观测端点
 │  ├─ harness/        # pipeline / planner / agent_loop / context / compactor / memory

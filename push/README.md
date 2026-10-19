@@ -5,7 +5,7 @@
 | 必交项 | 入口 | 如何核查 |
 |---|---|---|
 | **① 可操作 Web 产品** | [http://8.136.108.32:3000/console](http://8.136.108.32:3000/console) | 首页 `/` → 307 跳 `/console`；输入非敏感 A 股目标即可发起 Run。当前为 **HTTP**，勿填私人信息。 |
-| **② 源代码仓库 + README** | [github.com/hcidfy/TongHua](https://github.com/hcidfy/TongHua) ，项目根 `InvestmentXBuddy/`；README 见[项目 README](../README.md) | README 覆盖启动方式、环境变量、产品选择、AI 角色、数据来源、已知边界、未做事项七项。 |
+| **② 源代码仓库 + README** | [github.com/hcidfy/TongHua](https://github.com/hcidfy/TongHua)（仓库根即项目根），README 见[项目 README](../README.md) | README 覆盖启动方式、环境变量、产品选择、AI 角色、数据来源、已知边界、未做事项七项。 |
 | **③ AI 使用与验证记录** | [AI_USAGE_AND_VERIFICATION.md](AI_USAGE_AND_VERIFICATION.md) | AI 工具、参与环节、候选人修正的错误/不合理结果、责任划分。 |
 | **④ 测试说明** | [TEST_REPORT.md](TEST_REPORT.md) | 主链路、数据缺失/接口失败、极端与合规边界；含本次云端只读核查原文与复现步骤。 |
 | **⑤ 单文件版（③+④ 合并，建议直接提交给平台）** | [AI使用与验证记录和测试说明.md](AI使用与验证记录和测试说明.md) | 自包含，可独立阅读。 |
